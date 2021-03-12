@@ -1,16 +1,18 @@
 import { HttpModule as NestHttpModule, Module } from '@nestjs/common';
 
-import { HttpWrapperService } from './http.service';
+import { ContextModule } from '../context/context.module';
+import { InnerHttpService } from './inner-http.service';
 
 @Module({
     imports: [
+        ContextModule,
         NestHttpModule,
     ],
     providers: [
-        HttpWrapperService,
+        InnerHttpService,
     ],
     exports: [
-        HttpWrapperService,
+        InnerHttpService,
     ],
 })
 export class HttpModule { }

@@ -1,8 +1,12 @@
 import {
     AndOperator,
     Association,
+    CountOptions as OrmCountOptions,
+    CreateOptions as OrmCreateOptions,
     DestroyOptions as OrmDestroyOptions,
     FindOptions as OrmFindOptions,
+    FindOrCreateOptions as OrmFindOrCreateOptions,
+    GroupOption as OrmGroupOption,
     IncludeOptions,
     Model,
     OrOperator,
@@ -31,6 +35,8 @@ export type WhereOptions = WhereAttributeHash | AndOperator | OrOperator | Liter
  */
 export type Includeable = typeof Model | Association | IncludeOptions | { all: true } | string;
 
+export type GroupOption = OrmGroupOption;
+
 /**
  * Options that are passed to any model creating a SELECT query
  *
@@ -38,6 +44,18 @@ export type Includeable = typeof Model | Association | IncludeOptions | { all: t
  */
 // tslint:disable-next-line: no-empty-interface
 export interface FindOptions extends OrmFindOptions { }
+
+/**
+ * Options used for Model.create
+ */
+// tslint:disable-next-line: no-empty-interface
+export interface CreateOptions extends OrmCreateOptions { }
+
+/**
+ * Options used for Model.findOrCreate
+ */
+// tslint:disable-next-line: no-empty-interface
+export interface FindOrCreateOptions extends OrmFindOrCreateOptions { }
 
 /**
  * Options used for Model.update
@@ -50,3 +68,9 @@ export interface UpdateOptions extends OrmUpdateOptions { }
  */
 // tslint:disable-next-line: no-empty-interface
 export interface DestroyOptions extends OrmDestroyOptions { }
+
+/**
+ * Count the number of records matching the provided where clause.
+ */
+// tslint:disable-next-line: no-empty-interface
+export interface CountOptions extends OrmCountOptions { }

@@ -1,27 +1,34 @@
-import { BullModule } from '@nestjs/bull';
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
+import { DynamicModule, Module } from '@nestjs/common';
+import { DiscoveryModule } from '@nestjs/core';
 
-import { ContextMiddleware } from '../context/context.middleware';
-import { JobConfig } from './../configuration/job.config';
-import { JobService } from './job.service';
+import { ContextModule } from '../context/context.module';
+import { JobDispatcher } from './job-dispatcher';
+import { JobMetadataAccessor } from './job-metadata.accessor';
+import { JobExplorer } from './job.explorer';
 
-@Module({
-    imports: [
-        JwtModule.register({}),
-        BullModule.registerQueue(...JobConfig.getDefaultJobConfig()),
-    ],
-    providers: [
-        JobService,
-    ],
-    exports: [
-        JobService,
-    ],
-})
-export class JobModule implements NestModule {
-    configure(consumer: MiddlewareConsumer) {
-        consumer
-            .apply(ContextMiddleware)
-            .forRoutes('(.*)');
+@Module({})
+export class JobModule {
+    static forRoot(): DynamicModule {
+        return {
+            module: JobModule,
+            imports: [
+                {
+                    global: true,
+                    module: JobModule,
+                    imports: [
+                        DiscoveryModule,
+                        ContextModule,
+                    ],
+                    providers: [
+                        JobDispatcher,
+                        JobExplorer,
+                        JobMetadataAccessor,
+                    ],
+                    exports: [
+                        JobDispatcher,
+                    ],
+                },
+            ],
+        };
     }
 }

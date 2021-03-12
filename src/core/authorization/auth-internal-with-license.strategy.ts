@@ -5,7 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import config from '../configuration/config';
 
 @Injectable()
-export class AuthStrategy extends PassportStrategy(Strategy, 'auth') {
+export class AuthInternalWithLicenseStrategy extends PassportStrategy(Strategy, 'auth-internal-with-license') {
     constructor() {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -15,7 +15,7 @@ export class AuthStrategy extends PassportStrategy(Strategy, 'auth') {
     }
 
     async validate(payload: any) {
-        if (payload.id && payload.licenseId && payload.exp) {
+        if (payload.id && payload.licenseId && payload.exp && payload.internal) {
             return payload;
         }
     }

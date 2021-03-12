@@ -16,7 +16,7 @@ export function handleSingleRelationId<D>(value: D, relationId: v4, identifier =
     return value;
 }
 
-export function handleManyRelationId<D>(value: D[], obj: any, identifier = 'id'): D[] {
+export function handleManyRelationId<D>(value: D[], obj: any, identifier = 'id', filterValidValues = false): D[] {
     // Filter null values
     const validValues = (value || []).filter(i => i[identifier]);
 
@@ -24,7 +24,7 @@ export function handleManyRelationId<D>(value: D[], obj: any, identifier = 'id')
         return undefined;
     }
 
-    return value;
+    return filterValidValues ? validValues : value;
 }
 
 export function handleHasOne<D>(value: D, obj: any, identifier = 'id'): D {

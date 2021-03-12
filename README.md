@@ -1,4 +1,4 @@
-# Ponto System Web Services
+# Seed Example Services
 
 ## CollectorService
 

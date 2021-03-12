@@ -1,40 +1,38 @@
-import { HttpModule as NestHttpModule, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ScheduleModule } from '@nestjs/schedule';
 import { SequelizeModule } from '@nestjs/sequelize';
-import { format } from 'logform';
 import { utilities as nestWinstonModuleUtilities, WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 
+import { AuthInternalWithLicenseStrategy } from './core/authorization/auth-internal-with-license.strategy';
 import { AuthInternalStrategy } from './core/authorization/auth-internal.strategy';
 import { AuthModule } from './core/authorization/auth.module';
 import { AuthStrategy } from './core/authorization/auth.strategy';
 import { RolesGuard } from './core/authorization/guards/roles.guard';
 import config from './core/configuration/config';
 import { OrmConfig } from './core/configuration/orm.config';
-import { Context } from './core/context/context';
 import { ContextMiddleware } from './core/context/context.middleware';
-import { JobModule } from './core/job/job.module';
+import { ContextModule } from './core/context/context.module';
 import { MailerModule } from './core/mailer/mailer.module';
+import { QueueModule } from './core/queue/queue.module';
 import { GeneralModule } from './modules/general/general.module';
-
-const licenseFormatter = format((info, opts) => {
-  const licenseId = Context.license();
-  const userId = Context.user();
-  info.context += ` - [ License: ${licenseId}, User: ${userId}]`;
-  return info;
-});
+import { GroupModule } from './modules/group/group.module';
 
 @Module({
   imports: [
     GeneralModule,
+    GroupModule,
 
-    JobModule,
+    ContextModule,
+    QueueModule,
     MailerModule,
     AuthModule,
     PassportModule,
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -42,10 +40,6 @@ const licenseFormatter = format((info, opts) => {
     SequelizeModule.forRoot(
       OrmConfig.getDefaultSequelizeOrmConfig(),
     ),
-    NestHttpModule.register({
-      timeout: config.getAsNumber('HTTP_TIMEOUT'),
-      maxRedirects: config.getAsNumber('HTTP_MAX_REDIRECTS'),
-    }),
     WinstonModule.forRoot({
       format: winston.format.json(),
       transports: [
@@ -54,7 +48,6 @@ const licenseFormatter = format((info, opts) => {
           filename: config.getAsString('APP_ERROR_LOG_FILE'),
           format: winston.format.combine(
             winston.format.timestamp(),
-            licenseFormatter(),
             nestWinstonModuleUtilities.format.nestLike(),
           ),
         }),
@@ -63,7 +56,6 @@ const licenseFormatter = format((info, opts) => {
           filename: config.getAsString('APP_WARN_LOG_FILE'),
           format: winston.format.combine(
             winston.format.timestamp(),
-            licenseFormatter(),
             nestWinstonModuleUtilities.format.nestLike(),
           ),
         }),
@@ -73,6 +65,7 @@ const licenseFormatter = format((info, opts) => {
   providers: [
     AuthStrategy,
     AuthInternalStrategy,
+    AuthInternalWithLicenseStrategy,
     {
       provide: APP_GUARD,
       useClass: RolesGuard,

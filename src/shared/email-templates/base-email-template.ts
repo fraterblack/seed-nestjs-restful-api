@@ -7,7 +7,7 @@ export class BaseEmailTemplate implements IBaseTemplate {
         <html style="border: 0; color: #343434; font-size: 14px; font-weight: normal; line-height: 1.2; margin: 0; padding: 0;">
             <head>
                 <META HTTP-EQUIV="content-type" CONTENT="text/html"; charset="UTF-8">
-                <title>Email by Ponto System Web</title>
+                <title>Email by Teste</title>
             </head>
             <body style="background: #e8e8e8; border: 0; color: #343434; font-family: Helvetica, Arial, sans-serif; font-size: 14px; font-weight: normal; line-height: 1.2; margin: 0; padding: 0;">
             <table border="0" cellpadding="0" cellspacing="0" style="background: #ffffff; border: 0; border-spacing: 0; color: #343434; font-size: 14px; font-weight: normal; line-height: 1.2; margin: 0 auto; min-width: 320px; padding: 0; width: 70%;">

@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import advancedFormat from 'dayjs/plugin/advancedFormat';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import duration from 'dayjs/plugin/duration';
-import isoWeek from 'dayjs/plugin/isoWeek';
+import timezone from 'dayjs/plugin/timezone';
 import utc from 'dayjs/plugin/utc';
 import helmet from 'helmet';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
@@ -14,19 +14,17 @@ import { createNamespace } from 'node-request-context';
 
 import { AppModule } from './app.module';
 import { ErrorFilter } from './core/common/exceptions/error.filter';
-import { setExtensions } from './core/common/utils/extensions';
 import config from './core/configuration/config';
 
 dayjs.extend(utc);
+dayjs.extend(timezone);
 dayjs.extend(duration);
 dayjs.extend(advancedFormat);
 dayjs.extend(customParseFormat);
-dayjs.extend(isoWeek);
+
+dayjs.tz.setDefault('America/Sao_Paulo');
 
 createNamespace(config.getAsString('APP_PREFIX'));
-
-// Set native object extensions
-setExtensions();
 
 async function bootstrap() {
   // start application
@@ -51,7 +49,7 @@ async function bootstrap() {
 
   // Configure Swagger
   const options = new DocumentBuilder()
-    .setTitle('PSW Collector Services')
+    .setTitle('Seed Example Services')
     .build();
 
   const document = SwaggerModule.createDocument(app, options);
