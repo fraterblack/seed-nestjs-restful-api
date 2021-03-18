@@ -3,6 +3,8 @@ import { Expose, Transform } from 'class-transformer';
 import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 import { v4 } from 'uuid/interfaces';
 
+import { TransformParams } from './dto-utils';
+
 export abstract class BaseDto<T> {
     @Expose()
     @IsUUID()
@@ -12,9 +14,9 @@ export abstract class BaseDto<T> {
 
     @Expose({ toClassOnly: true })
     @ApiPropertyOptional({ description: 'True when record was soft deleted' })
-    @Transform((value, obj: T) => {
+    @Transform((params: TransformParams<T>) => {
         // tslint:disable-next-line: no-string-literal
-        return (obj && obj['deletedAt']) ? true : undefined;
+        return (params && params.obj && params.obj['deletedAt']) ? true : undefined;
     })
     deleted?: boolean;
 

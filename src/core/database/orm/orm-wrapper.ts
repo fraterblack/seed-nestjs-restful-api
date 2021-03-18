@@ -10,6 +10,7 @@ import {
     IncludeOptions,
     Model,
     OrOperator,
+    ScopeOptions as OrmScopeOptions,
     UpdateOptions as OrmUpdateOptions,
     WhereAttributeHash,
 } from 'sequelize';
@@ -74,3 +75,9 @@ export interface DestroyOptions extends OrmDestroyOptions { }
  */
 // tslint:disable-next-line: no-empty-interface
 export interface CountOptions extends OrmCountOptions { }
+
+/**
+ * Scope options
+ */
+// tslint:disable-next-line: no-empty-interface
+export interface ScopeOptions extends OrmScopeOptions { }

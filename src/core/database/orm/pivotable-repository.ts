@@ -66,7 +66,7 @@ export abstract class PivotableRepository<T extends Model, A> extends TenancyRep
                 },
             };
 
-            await this.model.destroy(whereCondition);
+            await this.model.scope(this.deleteScope()).destroy(whereCondition);
         }
     }
 

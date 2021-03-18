@@ -1,4 +1,4 @@
-import { isArray, isString } from 'lodash';
+import { cloneDeep, first, isArray, isString } from 'lodash';
 import sequelize, { FindAndCountOptions, GroupOption, Model, Op, Order, Sequelize, WhereAttributeHash } from 'sequelize';
 import { Where } from 'sequelize/types/lib/utils';
 import { v4 } from 'uuid/interfaces';
@@ -19,6 +19,7 @@ import {
     FindOrCreateOptions,
     Identifier,
     Includeable,
+    ScopeOptions,
     UpdateOptions,
     WhereOptions,
 } from './orm-wrapper';
@@ -30,11 +31,6 @@ export abstract class BaseRepository<T extends Model> {
     protected relations: IRelations = {};
 
     /**
-     * force setting foreign key of nullable relation to null on update
-     */
-    protected nullableRelations: string[] = [];
-
-    /**
      * Set default order for queries
      */
     protected defaultOrder: string[][] = [];
@@ -44,83 +40,71 @@ export abstract class BaseRepository<T extends Model> {
      */
     protected relatedForeignKey: string = '';
 
-    constructor(protected readonly model: (new () => T) & typeof Model) {
-        // BeforeBulkUpdate
-        const beforeBulkUpdateHook = (options: any) => {
-            options.individualHooks = true;
-
-            /**
-             * This is a workaround to force setting foreign key of nullable relation to null on update
-             * Currently old foreign key is setted on upda a record setting null to foreignKey
-             */
-            if (options.attributes && this.nullableRelations && this.nullableRelations.length) {
-                this.nullableRelations.forEach(i => {
-                    if (!options.attributes[i]) {
-                        options.attributes[i] = null;
-                    }
-                });
-            }
-        };
-        model.addHook('beforeBulkUpdate', beforeBulkUpdateHook);
+    // tslint:disable-next-line: callable-types
+    constructor(protected readonly model: { new(): T } & typeof Model) {
+        // Setup default scopes
+        this.setupFetchScope(model);
+        this.setupUpdateScope(model);
+        this.setupDeleteScope(model);
     }
+
+    /**
+     * Setup default fetch scope
+     *
+     */
+    // tslint:disable-next-line: no-empty
+    protected setupFetchScope(model: typeof Model): void { }
+
+    /**
+     * Setup default update scope
+     *
+     */
+    // tslint:disable-next-line: no-empty
+    protected setupUpdateScope(model: typeof Model): void { }
+
+    /**
+     * Setup default delete scope
+     *
+     */
+    // tslint:disable-next-line: no-empty
+    protected setupDeleteScope(model: typeof Model): void { }
 
     //#region Create
 
     /**
-     * Create model
+     * Create
      *
      * @param {T} model
      * @param {CreateOptions} options
      * @returns {Promise<T>}
-     * @memberof BaseRepository
      */
     async create(model: T, options?: CreateOptions): Promise<T> {
         model = await this.beforeCreate(model, options);
 
-        const newModel = await this.model.sequelize.transaction(async t => {
-            options = options || {};
-            options.transaction = t;
-
-            const newModelToCommit = await this.model.create<T>(model, options);
-
-            return this.afterCreate(newModelToCommit, options);
-        });
+        model = this.beforeCreateModel(model, options);
+        const newModel = await this.model.create<T>(model, options);
 
         return this.afterCreateCommit(newModel);
     }
 
     /**
-     * Execute some action before create model
+     * Execute some action before create
      *
      * @param {T} model
      * @param {CreateOptions} options
      * @returns {Promise<T>}
-     * @memberof BaseRepository
      */
-    async beforeCreate(model: T, options?: CreateOptions): Promise<T> {
+    protected async beforeCreate(model: T, options?: CreateOptions): Promise<T> {
         return model;
     }
 
     /**
-     * Execute some action after create model
-     *
-     * @param {T} model
-     * @param {CreateOptions} options
-     * @returns {Promise<T>}
-     * @memberof BaseRepository
-     */
-    afterCreate(model: T, options?: CreateOptions): Promise<T> {
-        return Promise.resolve(model);
-    }
-
-    /**
-     * Execute some action after create commit model
+     * Execute some action after commit model
      *
      * @param {T} model
      * @returns {Promise<T>}
-     * @memberof BaseRepository
      */
-    async afterCreateCommit(model: T): Promise<T> {
+    protected async afterCreateCommit(model: T): Promise<T> {
         return model;
     }
 
@@ -129,30 +113,25 @@ export abstract class BaseRepository<T extends Model> {
     //#region FindOrCreate
 
     /**
-     * Find or Create model
+     * Find or Create
      *
      * @param {T} model
      * @param {FindOrCreateOptions} options
      * @param {boolean} performatic If true will use findCreateFind instead findOrCreate
      * @returns {Promise<[T, boolean]>}
-     * @memberof BaseRepository
      */
     async findOrCreate(model: T, options: Omit<FindOrCreateOptions, 'defaults'>, performatic = true): Promise<[T, boolean]> {
         const findOrCreateOptions: FindOrCreateOptions = { ...options };
         model = await this.beforeFindOrCreate(model, findOrCreateOptions);
 
-        const newModel = await this.model.sequelize.transaction(async t => {
-            findOrCreateOptions.transaction = t;
-            findOrCreateOptions.defaults = model;
+        model = this.beforeCreateModel(model, options);
+        findOrCreateOptions.defaults = model;
 
-            if (!findOrCreateOptions.where) {
-                throw new Error('Is missing where attribute for findOrCreate options');
-            }
+        if (!findOrCreateOptions.where) {
+            throw new Error('Is missing where attribute for findOrCreate options');
+        }
 
-            const newModelToCommit = await this.model[performatic ? 'findCreateFind' : 'findOrCreate']<T>(findOrCreateOptions);
-
-            return this.afterFindOrCreate(newModelToCommit, options);
-        });
+        const newModel = await this.model[performatic ? 'findCreateFind' : 'findOrCreate']<T>(findOrCreateOptions);
 
         return this.afterFindOrCreateCommit(newModel);
     }
@@ -163,14 +142,9 @@ export abstract class BaseRepository<T extends Model> {
      * @param {[T, boolean]} result
      * @param {FindOrCreateOptions} options
      * @returns {Promise<[T, boolean]>}
-     * @memberof BaseRepository
      */
-    async beforeFindOrCreate(model: T, options?: FindOrCreateOptions): Promise<T> {
+    protected async beforeFindOrCreate(model: T, options?: FindOrCreateOptions): Promise<T> {
         return model;
-    }
-
-    afterFindOrCreate(result: [T, boolean], options?: FindOrCreateOptions): Promise<[T, boolean]> {
-        return Promise.resolve(result);
     }
 
     /**
@@ -178,9 +152,8 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {[T, boolean]} result
      * @returns {Promise<[T, boolean]>}
-     * @memberof BaseRepository
      */
-    async afterFindOrCreateCommit(result: [T, boolean]): Promise<[T, boolean]> {
+    protected async afterFindOrCreateCommit(result: [T, boolean]): Promise<[T, boolean]> {
         return result;
     }
 
@@ -188,17 +161,20 @@ export abstract class BaseRepository<T extends Model> {
 
     //#region Create Many
 
+    /**
+     * Create Many
+     *
+     * @param {T[]} [models=[]]
+     * @returns {Promise<T[]>}
+     */
     async createMany(models: T[] = []): Promise<T[]> {
         models = await this.beforeCreateMany(models);
 
-        let newModels: T[] = [];
+        for (let model of models) {
+            model = this.beforeCreateModel(model);
+        }
 
-        await this.model.sequelize.transaction(async t => {
-            const transactionHost = { transaction: t };
-            newModels = await this.model.bulkCreate<T>(models, transactionHost);
-
-            return this.afterCreateMany(newModels);
-        });
+        const newModels = await this.model.bulkCreate<T>(models);
 
         return this.afterCreateManyCommit(newModels);
     }
@@ -208,21 +184,9 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {T[]} models
      * @returns {Promise<T[]>}
-     * @memberof BaseRepository
      */
-    async beforeCreateMany(models: T[]): Promise<T[]> {
+    protected async beforeCreateMany(models: T[]): Promise<T[]> {
         return models;
-    }
-
-    /**
-     * Execute some action after create many models
-     *
-     * @param {T} model
-     * @returns {Promise<T>}
-     * @memberof BaseRepository
-     */
-    afterCreateMany(models: T[]): Promise<T[]> {
-        return Promise.resolve(models);
     }
 
     /**
@@ -230,10 +194,24 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {T[]} models
      * @returns {Promise<T[]>}
-     * @memberof BaseRepository
      */
-    async afterCreateManyCommit(models: T[]): Promise<T[]> {
+    protected async afterCreateManyCommit(models: T[]): Promise<T[]> {
         return models;
+    }
+
+    //#endregion
+
+    //#region Common create methods
+
+    /**
+     * Hook called just before create model
+     *
+     * @param {T} model
+     * @param {(CreateOptions | Omit<FindOrCreateOptions, 'defaults'>)} [options]
+     * @returns {T}
+     */
+    protected beforeCreateModel(model: T, options?: CreateOptions | Omit<FindOrCreateOptions, 'defaults'>): T {
+        return model;
     }
 
     //#endregion
@@ -245,10 +223,11 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {T} model
      * @param {UpdateOptions} [options]
+     * @param {string} modelIdentifier
+     * @param {boolean} check After update check model changes by call find one method
      * @returns {Promise<T>}
-     * @memberof BaseRepository
      */
-    async update(model: T, options?: UpdateOptions, modelIdentifier: string = 'id'): Promise<T> {
+    async update(model: T, options?: UpdateOptions, modelIdentifier: string = 'id', check = true): Promise<T> {
         model = await this.beforeUpdate(model, options);
 
         if (!modelIdentifier) {
@@ -271,19 +250,18 @@ export abstract class BaseRepository<T extends Model> {
         // If options is not exists, ensure create a where condition to avoid massive update
         const updateOptions: UpdateOptions = options ? options : { where: { [modelIdentifier]: identifier } };
 
-        const updatedModel = await this.model.sequelize.transaction(async t => {
-            updateOptions.transaction = t;
+        model = this.beforeUpdateModel(model, updateOptions);
+        const result = await this.model.scope(this.updateScope()).update<T>(model, updateOptions);
 
-            await this.model.update<T>(model, updateOptions);
+        if (!result[0]) {
+            throw new EntityNotFoundError(this.model.tableName, identifier);
+        }
 
-            const currentModel = await this.model.findOne<T>(updateOptions);
+        let updatedModel: T = first(result[1]);
 
-            if (!currentModel) {
-                throw new EntityNotFoundError(this.model.tableName, identifier);
-            }
-
-            return this.afterUpdate(Object.assign(currentModel, model));
-        });
+        if (check) {
+            updatedModel = await this.model.findOne<T>(updateOptions);
+        }
 
         return this.afterUpdateCommit(updatedModel);
     }
@@ -294,21 +272,9 @@ export abstract class BaseRepository<T extends Model> {
      * @param {T} model
      * @param {UpdateOptions} [options]
      * @returns {Promise<T>}
-     * @memberof BaseRepository
      */
-    async beforeUpdate(model: T, options?: UpdateOptions): Promise<T> {
+    protected async beforeUpdate(model: T, options?: UpdateOptions): Promise<T> {
         return model;
-    }
-
-    /**
-     * Execute some action after update model
-     *
-     * @param {T} model
-     * @returns {Promise<T>}
-     * @memberof BaseRepository
-     */
-    afterUpdate(model: T): Promise<T> {
-        return Promise.resolve(model);
     }
 
     /**
@@ -316,9 +282,8 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {T} model
      * @returns {Promise<T>}
-     * @memberof BaseRepository
      */
-    async afterUpdateCommit(model: T): Promise<T> {
+    protected async afterUpdateCommit(model: T): Promise<T> {
         return model;
     }
 
@@ -326,31 +291,27 @@ export abstract class BaseRepository<T extends Model> {
 
     //#region Update All
 
+    /**
+     * Update All
+     *
+     * @param {Partial<T>} model
+     * @param {UpdateOptions} [options]
+     * @returns {Promise<T[]>}
+     */
     async updateAll(model: Partial<T>, options?: UpdateOptions): Promise<T[]> {
         model = await this.beforeUpdateAll(model, options);
 
-        let updatedModels: T[] = [];
-
-        await this.model.sequelize.transaction(async t => {
-            options.transaction = t;
-
-            updatedModels = (await this.model.update<T>(model, options))[1];
-
-            return this.afterUpdateAll(updatedModels);
-        });
+        model = this.beforeUpdateModel(model as any, options);
+        const updatedModels: T[] = (await this.model.scope(this.updateScope()).update<T>(model, options))[1];
 
         return this.afterUpdateAllCommit(updatedModels);
     }
 
-    async beforeUpdateAll(model: Partial<T>, options?: UpdateOptions): Promise<Partial<T>> {
+    protected async beforeUpdateAll(model: Partial<T>, options?: UpdateOptions): Promise<Partial<T>> {
         return model;
     }
 
-    afterUpdateAll(models: T[]): Promise<T[]> {
-        return Promise.resolve(models);
-    }
-
-    async afterUpdateAllCommit(models: T[]): Promise<T[]> {
+    protected async afterUpdateAllCommit(models: T[]): Promise<T[]> {
         return models;
     }
 
@@ -359,20 +320,20 @@ export abstract class BaseRepository<T extends Model> {
     //#region Update Many
 
     /**
-     * Update model
+     * Update Many
      *
      * @param {T[]} models
      * @param {UpdateOptions} [options]
+     * @param {boolean} check After update check model changes by call find one method
      * @returns {Promise<T[]>}
-     * @memberof BaseRepository
      */
-    async updateMany(models: T[], options?: UpdateOptions): Promise<T[]> {
+    async updateMany(models: T[], options?: UpdateOptions, check = true): Promise<T[]> {
         models = await this.beforeUpdateMany(models, options);
 
         const updatedModels: T[] = [];
 
         await this.model.sequelize.transaction(async t => {
-            for (const model of models) {
+            for (let model of models) {
                 // tslint:disable-next-line: no-string-literal
                 if (!model['id']) {
                     throw new EntityNotFoundError(this.model.tableName, 'Undefined identifier');
@@ -394,18 +355,21 @@ export abstract class BaseRepository<T extends Model> {
 
                 updateOptions.transaction = t;
 
-                await this.model.update<T>(model, updateOptions);
+                model = this.beforeUpdateModel(model, options);
+                const result = await this.model.scope(this.updateScope()).update<T>(model, updateOptions);
 
-                const updatedModel = await this.model.findByPk<T>(identifier);
-
-                if (!updatedModel) {
+                if (!result[0]) {
                     throw new EntityNotFoundError(this.model.tableName, identifier);
                 }
 
-                updatedModels.push(Object.assign(updatedModel, model));
-            }
+                let updatedModel: T = first(result[1]);
 
-            return this.afterUpdateMany(updatedModels);
+                if (check) {
+                    updatedModel = await this.model.findOne<T>(updateOptions);
+                }
+
+                updatedModels.push(updatedModel);
+            }
         });
 
         return this.afterUpdateManyCommit(updatedModels);
@@ -417,21 +381,9 @@ export abstract class BaseRepository<T extends Model> {
      * @param {T[]} models
      * @param {UpdateOptions} [options]
      * @returns {Promise<T[]>}
-     * @memberof BaseRepository
      */
-    async beforeUpdateMany(models: T[], options?: UpdateOptions): Promise<T[]> {
+    protected async beforeUpdateMany(models: T[], options?: UpdateOptions): Promise<T[]> {
         return models;
-    }
-
-    /**
-     * Execute some action after update many models
-     *
-     * @param {T[]} models
-     * @returns {Promise<T[]>}
-     * @memberof BaseRepository
-     */
-    afterUpdateMany(models: T[]): Promise<T[]> {
-        return Promise.resolve(models);
     }
 
     /**
@@ -439,10 +391,33 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {T[]} models
      * @returns {Promise<T[]>}
-     * @memberof BaseRepository
      */
-    async afterUpdateManyCommit(models: T[]): Promise<T[]> {
+    protected async afterUpdateManyCommit(models: T[]): Promise<T[]> {
         return models;
+    }
+
+    //#endregion
+
+    //#region Common update methods
+
+    /**
+     * Default scope for update methods
+     *
+     * @returns {ScopeOptions}
+     */
+    protected updateScope(): ScopeOptions {
+        return null;
+    }
+
+    /**
+     * Hook called just before update a model
+     *
+     * @param {T} model
+     * @param {UpdateOptions} [options]
+     * @returns {T}
+     */
+    protected beforeUpdateModel(model: T, options?: UpdateOptions): T {
+        return model;
     }
 
     //#endregion
@@ -454,10 +429,10 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {(T | string)} model
      * @param {DestroyOptions} [options]
+     * @param {boolean} strict
      * @returns {Promise<number>}
-     * @memberof BaseRepository
      */
-    async delete(model: T | string, options?: DestroyOptions): Promise<number> {
+    async delete(model: T | string, options?: DestroyOptions, strict = true): Promise<number> {
         model = await this.beforeDelete(model);
 
         const identifier = this.getIdentifier(model);
@@ -469,17 +444,12 @@ export abstract class BaseRepository<T extends Model> {
 
         const destroyOptions = options ? options : { where: { id: identifier } };
 
-        const deleteResult = await this.model.sequelize.transaction(async t => {
-            destroyOptions.transaction = t;
+        this.beforeDeleteModel(destroyOptions);
+        const deleteResult = await this.model.scope(this.deleteScope()).destroy(destroyOptions);
 
-            const result = await this.model.destroy(destroyOptions);
-
-            if (!result) {
-                throw new EntityNotFoundError(this.model.tableName, destroyOptions);
-            }
-
-            return this.afterDelete(result);
-        });
+        if (!deleteResult && strict) {
+            throw new EntityNotFoundError(this.model.tableName, destroyOptions);
+        }
 
         return this.afterDeleteCommit(deleteResult);
     }
@@ -490,21 +460,9 @@ export abstract class BaseRepository<T extends Model> {
      * @param {(T | string)} model
      * @param {DestroyOptions} [options]
      * @returns {(Promise<T | string>)}
-     * @memberof BaseRepository
      */
-    async beforeDelete(model: T | string, options?: DestroyOptions): Promise<T | string> {
+    protected async beforeDelete(model: T | string, options?: DestroyOptions): Promise<T | string> {
         return model;
-    }
-
-    /**
-     * Execute some action after delete model
-     *
-     * @param {number} rows
-     * @returns {Promise<number>} Number of destroyed rows
-     * @memberof BaseRepository
-     */
-    afterDelete(rows: number): Promise<number> {
-        return Promise.resolve(rows);
     }
 
     /**
@@ -512,9 +470,8 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {number} rows
      * @returns {Promise<number>} Number of destroyed rows
-     * @memberof BaseRepository
      */
-    async afterDeleteCommit(rows: number): Promise<number> {
+    protected async afterDeleteCommit(rows: number): Promise<number> {
         return rows;
     }
 
@@ -527,15 +484,15 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {(T[] | string[])} models
      * @param {DestroyOptions} [options]
+     * @param {boolean} strict
      * @returns {Promise<number>}
-     * @memberof BaseRepository
      */
-    async deleteMany(models: T[] | string[], options?: DestroyOptions): Promise<number> {
+    async deleteMany(models: T[] | string[], options?: DestroyOptions, strict = true): Promise<number> {
         models = await this.beforeDeleteMany(models);
 
         const deleteResult = await this.model.sequelize.transaction(async t => {
+            options = options || {};
             let totalResult = 0;
-
             for (const model of models) {
                 const identifier = this.getIdentifier(model);
 
@@ -543,27 +500,30 @@ export abstract class BaseRepository<T extends Model> {
                     continue;
                 }
 
+                const clonedOptions = cloneDeep(options);
+
                 // Ensure a where condition exists
-                if (options && (!options.where || !Object.keys(options.where).length)) {
-                    options.where = { id: identifier };
+                if (!clonedOptions.where || !Object.keys(clonedOptions.where).length) {
+                    clonedOptions.where = { id: identifier };
                 }
 
-                const destroyOptions = options ? options : { where: { id: identifier } };
+                const destroyOptions = clonedOptions ? clonedOptions : { where: { id: identifier } };
                 destroyOptions.transaction = t;
 
-                const result = await this.model.destroy(destroyOptions);
+                this.beforeDeleteModel(destroyOptions);
+                const result = await this.model.scope(this.deleteScope()).destroy(destroyOptions);
 
-                if (!result) {
+                if (!result && strict) {
                     throw new EntityNotFoundError(this.model.tableName, destroyOptions);
                 }
 
                 totalResult++;
             }
 
-            return this.afterDeleteMany(totalResult);
+            return totalResult;
         });
 
-        return this.afterDeleteCommit(deleteResult);
+        return this.afterDeleteManyCommit(deleteResult);
     }
 
     /**
@@ -572,21 +532,9 @@ export abstract class BaseRepository<T extends Model> {
      * @param {(T[] | string[])} models
      * @param {DestroyOptions} [options]
      * @returns {(Promise<T[] | string[]>)}
-     * @memberof BaseRepository
      */
-    async beforeDeleteMany(models: T[] | string[], options?: DestroyOptions): Promise<T[] | string[]> {
+    protected async beforeDeleteMany(models: T[] | string[], options?: DestroyOptions): Promise<T[] | string[]> {
         return models;
-    }
-
-    /**
-     * Execute some action after delete model
-     *
-     * @param {number} rows
-     * @returns {Promise<number>} Number of destroyed rows
-     * @memberof BaseRepository
-     */
-    afterDeleteMany(rows: number): Promise<number> {
-        return Promise.resolve(rows);
     }
 
     /**
@@ -594,11 +542,31 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {number} rows
      * @returns {Promise<number>} Number of destroyed rows
-     * @memberof BaseRepository
      */
-    async afterDeleteManyCommit(rows: number): Promise<number> {
+    protected async afterDeleteManyCommit(rows: number): Promise<number> {
         return rows;
     }
+
+    //#endregion
+
+    //#region Common delete methods
+
+    /**
+     * Default scope for delete methods
+     *
+     * @returns {ScopeOptions}
+     */
+    protected deleteScope(): ScopeOptions {
+        return null;
+    }
+
+    /**
+     * Hook called just before delete a model
+     *
+     * @param {DestroyOptions} options
+     */
+    // tslint:disable-next-line: no-empty
+    protected beforeDeleteModel(options: DestroyOptions): void { }
 
     //#endregion
 
@@ -614,11 +582,11 @@ export abstract class BaseRepository<T extends Model> {
     async findOneOrFail(identifier?: Identifier, options?: Omit<FindOptions, 'where'>, strict = true): Promise<T> {
         const transformedOptions = this.transformQueryOptionsDtoToFindOptions(options);
 
-        const result = await this.model.findByPk<T>(identifier, transformedOptions);
+        const result = await this.model.scope(this.fetchScope()).findByPk<T>(identifier, transformedOptions);
 
         if (!result) {
             if (strict) {
-                throw new EntityNotFoundError(this.model.name, identifier);
+                throw new EntityNotFoundError(this.model.name, { identifier, ...transformedOptions });
             }
 
             return null;
@@ -639,7 +607,7 @@ export abstract class BaseRepository<T extends Model> {
 
         transformedOptions.where = whereCondition;
 
-        const result = await this.model.findOne<T>(transformedOptions);
+        const result = await this.model.scope(this.fetchScope()).findOne<T>(transformedOptions);
 
         if (!result) {
             if (strict) {
@@ -661,7 +629,7 @@ export abstract class BaseRepository<T extends Model> {
     async find(options?: QueryOptions, strict = true): Promise<T> {
         const transformedOptions = this.transformQueryOptionsDtoToFindOptions(options);
 
-        const result = await this.model.findOne<T>(transformedOptions);
+        const result = await this.model.scope(this.fetchScope()).findOne<T>(transformedOptions);
 
         if (!result) {
             if (strict) {
@@ -679,7 +647,6 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {QueryOptions} [options] App parseable options
      * @returns {Promise<{ rows: T[]; count: number }>}
-     * @memberof BaseRepository
      */
     async paginatedQuery(options?: QueryOptions): Promise<{ rows: T[]; count: number }> {
         const transformedOptions: FindAndCountOptions = this.transformQueryOptionsDtoToFindOptions(options);
@@ -688,7 +655,7 @@ export abstract class BaseRepository<T extends Model> {
             transformedOptions.distinct = true;
         }
 
-        return this.model.findAndCountAll<T>(transformedOptions);
+        return this.model.scope(this.fetchScope()).findAndCountAll<T>(transformedOptions);
     }
 
     /**
@@ -696,12 +663,20 @@ export abstract class BaseRepository<T extends Model> {
      *
      * @param {QueryOptions} [options] App parseable options
      * @returns {Promise<T[]>}
-     * @memberof BaseRepository
      */
     async query(options?: QueryOptions): Promise<T[]> {
         const transformedOptions = this.transformQueryOptionsDtoToFindOptions(options);
 
-        return this.model.findAll<T>(transformedOptions);
+        return this.model.scope(this.fetchScope()).findAll<T>(transformedOptions);
+    }
+
+    /**
+     * Default scope for fetch methods
+     *
+     * @returns {ScopeOptions}
+     */
+    protected fetchScope(): ScopeOptions {
+        return null;
     }
 
     //#endregion
@@ -810,14 +785,18 @@ export abstract class BaseRepository<T extends Model> {
 
     //#endregion
 
+    //#region Aggregate
+
     async count(options?: CountOptions): Promise<number> {
         const transformedOptions: OrmCountOptions = this.transformQueryOptionsDtoToCountOptions(options);
 
-        const result = await this.model.findAll<T>(transformedOptions);
+        const result = await this.model.scope(this.fetchScope()).findAll<T>(transformedOptions);
 
         // tslint:disable-next-line: no-string-literal
         return result && result[0] ? result[0]['count'] : 0;
     }
+
+    //#endregion
 
     orm(): Sequelize {
         return this.model.sequelize;
