@@ -249,6 +249,7 @@ export abstract class BaseRepository<T extends Model> {
 
         // If options is not exists, ensure create a where condition to avoid massive update
         const updateOptions: UpdateOptions = options ? options : { where: { [modelIdentifier]: identifier } };
+        updateOptions.returning = true;
 
         model = this.beforeUpdateModel(model, updateOptions);
         const result = await this.model.scope(this.updateScope()).update<T>(model, updateOptions);
@@ -263,7 +264,7 @@ export abstract class BaseRepository<T extends Model> {
             updatedModel = await this.model.findOne<T>(updateOptions);
         }
 
-        return this.afterUpdateCommit(updatedModel);
+        return this.afterUpdateCommit(Object.assign(updatedModel, model));
     }
 
     /**
@@ -300,6 +301,8 @@ export abstract class BaseRepository<T extends Model> {
      */
     async updateAll(model: Partial<T>, options?: UpdateOptions): Promise<T[]> {
         model = await this.beforeUpdateAll(model, options);
+
+        options.returning = true;
 
         model = this.beforeUpdateModel(model as any, options);
         const updatedModels: T[] = (await this.model.scope(this.updateScope()).update<T>(model, options))[1];
@@ -354,6 +357,7 @@ export abstract class BaseRepository<T extends Model> {
                 const updateOptions: UpdateOptions = options ? options : { where: { id: identifier } };
 
                 updateOptions.transaction = t;
+                updateOptions.returning = true;
 
                 model = this.beforeUpdateModel(model, options);
                 const result = await this.model.scope(this.updateScope()).update<T>(model, updateOptions);
@@ -368,7 +372,7 @@ export abstract class BaseRepository<T extends Model> {
                     updatedModel = await this.model.findOne<T>(updateOptions);
                 }
 
-                updatedModels.push(updatedModel);
+                updatedModels.push(Object.assign(updatedModel, model));
             }
         });
 
